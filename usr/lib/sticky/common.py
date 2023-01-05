@@ -54,7 +54,7 @@ class FileHandler(GObject.Object):
         self.notes_lists = info
 
     def get_note_list(self, group_name):
-        return self.notes_lists[group_name]
+        return sorted(self.notes_lists[group_name], key=lambda i: i['hidden']) 
 
     def get_note_group_names(self):
         return list(self.notes_lists.keys())

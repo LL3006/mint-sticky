@@ -338,8 +338,9 @@ class NotesManager(object):
 
     def on_list_clicked(self, list, event):
         for note in self.app.notes:
-            note.present_with_time(Gtk.get_current_event_time())
-
+            if not note.hidden:
+                note.present_with_time(Gtk.get_current_event_time())
+                
     def on_list_changed(self, a, group_name):
         if group_name == self.get_current_group():
             self.generate_previews()
@@ -429,6 +430,7 @@ class NotesManager(object):
         wrapper = Gtk.Box(halign=Gtk.Align.CENTER)
         context = wrapper.get_style_context()
         context.add_class(item.info['color'])
+        if item.info['hidden']: context.add_class('hidden')
         context.add_class('note-preview')
         outer_box.pack_start(wrapper, False, False, 0)
 

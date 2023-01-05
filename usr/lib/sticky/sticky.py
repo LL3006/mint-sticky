@@ -88,8 +88,8 @@ class Note(Gtk.Window):
         pass
 
     def __init__(self, app, parent, info={}):
-        self.app = app
-
+        self.app: Application = app
+        
         self.showing = False
         self.is_pinned = False
         self.changed_timer_id = 0
@@ -97,6 +97,7 @@ class Note(Gtk.Window):
 
         self.x = info.get('x', 0)
         self.y = info.get('y', 0)
+        self.hidden = info.get('hidden', False)
         self.height = info.get('height', self.app.settings.get_uint('default-height'))
         self.width = info.get('width', self.app.settings.get_uint('default-width'))
         title = info.get('title', '')
@@ -175,6 +176,13 @@ class Note(Gtk.Window):
         add_button.connect('button-press-event', self.on_title_click)
         add_button.set_tooltip_text(_("New Note"))
         self.title_bar.pack_end(add_button, False, False, 0)
+        
+        hide_icon = Gtk.Image.new_from_icon_name('sticky-hide', Gtk.IconSize.BUTTON)
+        hide_button = Gtk.Button(image=hide_icon, relief=Gtk.ReliefStyle.NONE, name='window-button', valign=Gtk.Align.CENTER)
+        hide_button.connect('clicked', self.set_note_hidden, True)
+        hide_button.connect('button-press-event', self.on_title_click)
+        hide_button.set_tooltip_text(_("Hide Note"))
+        self.title_bar.pack_end(hide_button, False, False, 0)
 
         text_icon = Gtk.Image.new_from_icon_name('sticky-text', Gtk.IconSize.BUTTON)
         text_button = Gtk.MenuButton(image=text_icon, relief=Gtk.ReliefStyle.NONE, name='window-button', valign=Gtk.Align.CENTER)
@@ -218,8 +226,8 @@ class Note(Gtk.Window):
         self.connect('window-state-event', self.update_window_state)
 
         self.move(self.x, self.y)
-
         self.show_all()
+        if self.hidden: self.hide() 
 
     def test(self, *args):
         self.buffer.test()
@@ -338,10 +346,12 @@ class Note(Gtk.Window):
     def restore(self, time=0):
         if time == 0:
             time = Gtk.get_current_event_time()
-
-        self.show()
-        self.present_with_time(time)
-        self.move(self.x, self.y)
+            
+        if not self.hidden:
+            self.show()
+            print("note.restore")
+            self.present_with_time(time)
+            self.move(self.x, self.y)
 
     def queue_update(self, b=None, invalidate_cache=False):
         self.invalid_cache = invalidate_cache
@@ -369,7 +379,8 @@ class Note(Gtk.Window):
             'width': self.width,
             'color': self.color,
             'title': self.title.get_text(),
-            'text': self.cached_text
+            'text': self.cached_text,
+            'hidden': self.hidden
         }
 
         return info
@@ -511,7 +522,14 @@ class Note(Gtk.Window):
 
     def apply_format(self, m, format_type):
         self.buffer.tag_selection(format_type)
-
+    
+    def set_note_hidden(self, w, hidden):
+        self.hidden = hidden
+        if (self.hidden): self.hide()
+        else:
+            self.show()
+        self.emit('update')
+    
     def remove(self, *args):
         # this is ugly but I'm not sure how to make it look better :)
         if (self.app.settings.get_boolean('disable-delete-confirm') or
@@ -765,7 +783,7 @@ class Application(Gtk.Application):
 
         # Create a default group
         if len(self.file_handler.get_note_group_names()) == 0:
-            self.file_handler.update_note_list([{'text':'', 'color':'yellow', 'x': 20, 'y': 20}], _("Group 1"))
+            self.file_handler.update_note_list([{'text':'', 'color':'yellow', 'x': 20, 'y': 20, 'hidden': False}], _("Group 1"))
 
         self.settings.set_boolean('first-run', False)
 
@@ -855,14 +873,16 @@ class Application(Gtk.Application):
             if note.is_active():
                 self.hide_notes()
                 return
-
         self.dummy_window.present_with_time(time)
-
+        
+        note_count = 0
         for note in self.notes:
-            note.restore(time)
-
-        if len(self.notes) == 0:
-            self.new_note()
+            if not note.hidden:
+                note.restore(time)
+                note_count += 1
+                
+        if note_count == 0:
+            self.new_note(None)
 
         self.notes_hidden = False
         self.update_dummy_window()
@@ -935,7 +955,9 @@ class Application(Gtk.Application):
     def focus_note(self, note_info):
         for note in self.notes:
             if note.get_info() == note_info:
+                if (note_info['hidden']): note.set_note_hidden(None, False)
                 note.present_with_time(0)
+                return
 
     def on_lists_changed(self, *args):
         if not self.note_group in self.file_handler.get_note_group_names():
@@ -997,6 +1019,7 @@ class Application(Gtk.Application):
 
     def open_settings_window(self, *args):
         if self.settings_window:
+            print("app.open_settings")
             self.settings_window.present_with_time(Gtk.get_current_event_time())
             return
 
